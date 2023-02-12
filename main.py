@@ -1,9 +1,12 @@
+from utils.verify_interval_datetime import check_time
 import exception
 from process_log import config_log
 from flask import Flask, request
+import send_email
 import threading
 import queue
 import detector
+import os
 
 logger = config_log(__name__)
 
@@ -15,18 +18,40 @@ detect = detector.detect()
 def push_message():
     requisicao = request.get_json(force=True)
     try:
-        path = str(requisicao['path_video'])
-        q.put(path)
+        path        = str(requisicao['path_video'])
+        location    = str(requisicao['location'])
+        hour_start  = int(requisicao['hour_start_email'])
+        hour_end    = int(requisicao['hour_end_email'])
+
+        q.put({"path": path,
+               "hour_start_email": hour_start,
+               "hour_end_email": hour_end,
+               "location": location})
     except:
         raise exception.InvalidUsage('Não foi possivel enviar para a fila!', status_code=400)
+
     return "OK"
+
+def delete_file(file_save):
+    os.remove(file_save)
 
 def worker():
     while True:
         item = q.get()
-        print(f'Working on {item}')
-        detect.video_analysis(item)
-        print(f'Finished {item}')
+
+        logger.debug(f"Inicio da verificação {item['path']}")
+
+        # Detecção de pessoas no video
+        file_save, name_file_final = detect.video_analysis(item['path'], item['location'])
+
+        if file_save is not None:
+            if check_time(item['hour_start_email'], item['hour_end_email']):
+                send_email.send_email(file_save, item['location'], name_file_final)
+
+            # Remove o arquivo após o envio
+            delete_file(file_save)
+
+        logger.debug(f"Final do processo {item['path']}")
         q.task_done()
 
 
@@ -36,4 +61,4 @@ threading.Thread(target=worker, daemon=True).start()
 # Block until all tasks are done.
 if __name__ == '__main__':
     logger.debug('Inicio do endpoint')
-    app.run(host="0.0.0.0", port=5001)
+    app.run(host="0.0.0.0", port=5001, load_dotenv=False)

@@ -3,19 +3,21 @@ from utils.datasets import LoadImages
 from utils.general import check_img_size, non_max_suppression, scale_coords, increment_path
 from utils.plots import plot_one_box
 from utils.torch_utils import select_device, time_synchronized
+from upload_driver import upload_to_drive
 
 from process_log import config_log
 from pathlib import Path
 from numpy import random
+from datetime import datetime
 
 import time
 import os
 import cv2
 import torch
 
-count_min_identified = os.getenv("COUNT_MIN_IDENTIFIED", 900) # Representa um minuto de uma pessoa identificada no video
-labels_identified = os.getenv("LABELS_IDENTIFIED", 'cow,person,persons').split(",")
-threshold_identified = os.getenv("THRESHOLD_IDENTIFIED", 0.80)
+count_min_identified = int(os.getenv("COUNT_MIN_IDENTIFIED", 900)) # Representa um minuto de uma pessoa identificada no video
+labels_identified = os.getenv("LABELS_IDENTIFIED", 'person,persons').split(",")
+threshold_identified = float(os.getenv("THRESHOLD_IDENTIFIED", 0.80))
 path_destination = os.getenv("PATH_DESTINATION", "attach_file")
 
 logger = config_log(__name__)
@@ -37,7 +39,9 @@ class detect():
         self.names = self.model.module.names if hasattr(self.model, 'module') else self.model.names
         self.colors = [[random.randint(0, 255) for _ in range(3)] for _ in self.names]
 
-    def video_analysis(self, source):
+    def video_analysis(self, source, location):
+
+        name_file_final = f"VIDEO_{location}_{datetime.now().strftime('%Y%m%d%H%M%S')}.mp4"
 
         # Directories
         save_dir = Path(path_destination)  # increment run
@@ -71,7 +75,7 @@ class detect():
                 p, s, im0, frame = path, '', im0s, getattr(dataset, 'frame', 0)
 
                 p = Path(p)  # to Path
-                save_path = str(save_dir / p.name)  # img.jpg
+                save_path = str(save_dir / name_file_final)  # Caminho do arquivo de destino
                 if len(det):
                     # Rescale boxes from img_size to im0 size
                     det[:, :4] = scale_coords(img.shape[2:], det[:, :4], im0.shape).round()
@@ -113,6 +117,11 @@ class detect():
 
         if count_labels_detection <= count_min_identified:
             os.remove(save_path)
+            save_path = None
+        else:
+            upload_to_drive(save_path, name_file_final)
 
         logger.debug(f'Quantidade de objetos encontrados: {count_labels_detection:.0f}')
         logger.debug(f'Feito. ({time.time() - t0:.3f}s)')
+
+        return save_path, name_file_final

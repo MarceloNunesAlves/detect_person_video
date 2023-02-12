@@ -20,8 +20,14 @@ def push_message():
     try:
         path        = str(requisicao['path_video'])
         location    = str(requisicao['location'])
-        hour_start  = int(requisicao['hour_start_email'])
-        hour_end    = int(requisicao['hour_end_email'])
+        try:
+            hour_start = int(requisicao['hour_start_email'])
+        except:
+            hour_start = None
+        try:
+            hour_end = int(requisicao['hour_end_email'])
+        except:
+            hour_end = None
 
         q.put({"path": path,
                "hour_start_email": hour_start,
@@ -45,7 +51,7 @@ def worker():
         file_save, name_file_final = detect.video_analysis(item['path'], item['location'])
 
         if file_save is not None:
-            if check_time(item['hour_start_email'], item['hour_end_email']):
+            if item['hour_start_email'] is not None and item['hour_end_email'] is not None and check_time(item['hour_start_email'], item['hour_end_email']):
                 send_email.send_email(file_save, item['location'], name_file_final)
 
             # Remove o arquivo após o envio

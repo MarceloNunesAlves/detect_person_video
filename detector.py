@@ -115,6 +115,9 @@ class detect():
                     vid_writer = cv2.VideoWriter(save_path, cv2.VideoWriter_fourcc(*'mp4v'), fps, (w, h))
                 vid_writer.write(im0)
 
+        # Fecha arquivo gerado
+        vid_writer.release()
+
         if count_labels_detection <= count_min_identified:
             os.remove(save_path)
             save_path = None

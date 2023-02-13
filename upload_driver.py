@@ -12,10 +12,10 @@ def upload_to_drive(file_path, file_name):
 
     service = build('drive', 'v3', credentials=credentials)
 
+    media = MediaFileUpload(file_path, mimetype='video/mp4', resumable=False) #application/octet-stream'
+
     file_metadata = {'name': file_name, 'parents': [folder_id]}
 
-    media = MediaFileUpload(file_path,
-                            mimetype='video/mp4')#application/octet-stream'
     file = service.files().create(body=file_metadata, media_body=media, fields='id').execute()
 
     print(F'Arquivo {file_name} salvo com sucesso no drive com o id: {file.get("id")}')

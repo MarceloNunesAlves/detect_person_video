@@ -1,1 +1,11 @@
 flask==2.0.1
+torch
+torchvision
+opencv-python
+tqdm==4.64.1
+matplotlib==3.6.2
+seaborn==0.12.2
+scipy==1.10.0
+google-api-core==2.11.0
+google-api-python-client==2.77.0
+pytorch==1.12.1

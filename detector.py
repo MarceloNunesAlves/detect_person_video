@@ -118,22 +118,21 @@ class detect():
                     vid_writer = cv2.VideoWriter(save_path, cv2.VideoWriter_fourcc(*'mp4v'), fps, (w, h))
                 frames.append(im0)
 
-        # Converter o array de frames para um array numpy
-        frames = np.array(frames)
-
-        # Escrever o vídeo com todos os frames de uma só vez
-        for frame in frames:
-            vid_writer.write(frame)
-
-        # Fecha arquivo gerado
-        vid_writer.release()
-
-        frames = None
-
         if count_labels_detection <= count_min_identified:
-            os.remove(save_path)
             save_path = None
         else:
+            # Converter o array de frames para um array numpy
+            frames = np.array(frames)
+
+            # Escrever o vídeo com todos os frames de uma só vez
+            for frame in frames:
+                vid_writer.write(frame)
+
+            # Fecha arquivo gerado
+            vid_writer.release()
+
+            frames = None
+
             upload_to_drive(save_path, name_file_final)
 
         logger.debug(f'Quantidade de objetos encontrados: {count_labels_detection:.0f}')

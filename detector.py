@@ -7,8 +7,9 @@ from upload_driver import upload_to_drive
 
 from process_log import config_log
 from pathlib import Path
-from numpy import random
 from datetime import datetime
+
+import numpy as np
 
 import time
 import os
@@ -37,7 +38,7 @@ class detect():
 
         # Get names and colors
         self.names = self.model.module.names if hasattr(self.model, 'module') else self.model.names
-        self.colors = [[random.randint(0, 255) for _ in range(3)] for _ in self.names]
+        self.colors = [[np.random.randint(0, 255) for _ in range(3)] for _ in self.names]
 
     def video_analysis(self, source, location):
 
@@ -53,6 +54,10 @@ class detect():
 
         count_labels_detection = 0
         t0 = time.time()
+
+        # Criar um array vazio para armazenar os frames
+        frames = []
+
         for path, img, im0s, vid_cap in dataset:
             img = torch.from_numpy(img).to(self.device)
             img = img.float()  # uint8 to fp16/32
@@ -103,8 +108,6 @@ class detect():
                 # Save results (video with detections)
                 if vid_path != save_path:  # new video
                     vid_path = save_path
-                    if isinstance(vid_writer, cv2.VideoWriter):
-                        vid_writer.release()  # release previous video writer
                     if vid_cap:  # video
                         fps = vid_cap.get(cv2.CAP_PROP_FPS)
                         w = int(vid_cap.get(cv2.CAP_PROP_FRAME_WIDTH))
@@ -113,10 +116,19 @@ class detect():
                         fps, w, h = 30, im0.shape[1], im0.shape[0]
                         save_path += '.mp4'
                     vid_writer = cv2.VideoWriter(save_path, cv2.VideoWriter_fourcc(*'mp4v'), fps, (w, h))
-                vid_writer.write(im0)
+                frames.append(im0)
+
+        # Converter o array de frames para um array numpy
+        frames = np.array(frames)
+
+        # Escrever o vídeo com todos os frames de uma só vez
+        for frame in frames:
+            vid_writer.write(frame)
 
         # Fecha arquivo gerado
         vid_writer.release()
+
+        frames = None
 
         if count_labels_detection <= count_min_identified:
             os.remove(save_path)

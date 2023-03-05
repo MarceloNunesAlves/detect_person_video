@@ -1,19 +1,18 @@
-from models.experimental import attempt_load
-from utils.datasets import LoadImages
-from utils.general import check_img_size, non_max_suppression, scale_coords, increment_path
-from utils.plots import plot_one_box
-from utils.torch_utils import select_device, time_synchronized
-from upload_driver import upload_to_drive
+from models.common import DetectMultiBackend
+from utils.dataloaders import LoadImages
+from utils.general import (LOGGER, check_img_size, cv2, increment_path, non_max_suppression, scale_boxes)
+from utils.torch_utils import select_device
 
+from utils.plots import plot_one_box
+from upload_driver import upload_to_drive
 from process_log import config_log
-from pathlib import Path
 from datetime import datetime
+from pathlib import Path
 
 import numpy as np
-
 import time
 import os
-import cv2
+import sys
 import torch
 
 count_min_identified = int(os.getenv("COUNT_MIN_IDENTIFIED", 900)) # Representa um minuto de uma pessoa identificada no video
@@ -23,22 +22,25 @@ path_destination = os.getenv("PATH_DESTINATION", "attach_file")
 
 logger = config_log(__name__)
 
+FILE = Path(__file__).resolve()
+ROOT = FILE.parents[0]  # YOLOv5 root directory
+if str(ROOT) not in sys.path:
+    sys.path.append(str(ROOT))  # add ROOT to PATH
+ROOT = Path(os.path.relpath(ROOT, Path.cwd()))  # relative
+
 class detect():
 
     def __init__(self):
-        self.imgsz = 640
-        # Initialize
-        self.device = select_device('')
 
+        weights = ROOT / 'yolov5s.pt'  # model path or triton URL
+        data = ROOT / 'data/coco128.yaml'  # dataset.yaml path
+
+        self.vid_stride = 1  # video frame-rate stride
         # Load model
-        self.model = attempt_load('yolov7.pt', map_location=self.device)  # load FP32 model
-        self.stride = int(self.model.stride.max())  # model stride
-
-        self.imgsz = check_img_size(self.imgsz, s=self.stride)  # check img_size
-
-        # Get names and colors
-        self.names = self.model.module.names if hasattr(self.model, 'module') else self.model.names
-        self.colors = [[np.random.randint(0, 255) for _ in range(3)] for _ in self.names]
+        self.device = select_device('')
+        self.model = DetectMultiBackend(weights, device=self.device, dnn=False, data=data, fp16=False)
+        self.imgsz = check_img_size((640, 640), s=self.model.stride)  # check image size
+        self.colors = [[np.random.randint(0, 255) for _ in range(3)] for _ in self.model.names]
 
     def video_analysis(self, source, location):
 
@@ -46,59 +48,62 @@ class detect():
 
         # Directories
         save_dir = Path(path_destination)  # increment run
-        save_dir.mkdir(parents=True, exist_ok=True)  # make dir
+        save_dir.mkdir(parents=True, exist_ok=True)
 
-        # Set Dataloader
-        vid_path, vid_writer = None, None
-        dataset = LoadImages(source, img_size=self.imgsz, stride=self.stride)
+        # Dataloader
+        bs = 1  # batch_size
+        dataset = LoadImages(source, img_size=self.imgsz, stride=self.model.stride, auto=self.model.pt, vid_stride=self.vid_stride)
+        vid_path, vid_writer = [None] * bs, [None] * bs
+
+        # Run inference
+        #self.model.warmup(imgsz=(1 if self.model.pt or self.model.triton else bs, 3, *self.imgsz))  # warmup
+        #seen, windows, dt = 0, [], (Profile(), Profile(), Profile())
 
         count_labels_detection = 0
         t0 = time.time()
 
-        # Criar um array vazio para armazenar os frames
         frames = []
 
-        for path, img, im0s, vid_cap in dataset:
-            img = torch.from_numpy(img).to(self.device)
-            img = img.float()  # uint8 to fp16/32
-            img /= 255.0  # 0 - 255 to 0.0 - 1.0
-            if img.ndimension() == 3:
-                img = img.unsqueeze(0)
+        for path, im, im0s, vid_cap, s in dataset:
+            im = torch.from_numpy(im).to(self.model.device)
+            im = im.half() if self.model.fp16 else im.float()  # uint8 to fp16/32
+            im /= 255  # 0 - 255 to 0.0 - 1.0
+            if len(im.shape) == 3:
+                im = im[None]  # expand for batch dim
 
             # Inference
-            t1 = time_synchronized()
-            with torch.no_grad():   # Calculating gradients would cause a GPU memory leak
-                pred = self.model(img, augment=False)[0]
-            t2 = time_synchronized()
+            t1 = time.time()
+            pred = self.model(im, augment=False)
+            t2 = time.time()
 
-            # Apply NMS
-            pred = non_max_suppression(pred, 0.25, 0.45, classes=None, agnostic=False)
-            t3 = time_synchronized()
+            # NMS
+            pred = non_max_suppression(pred, 0.25, 0.45, None, False, max_det=1000)
+            t3 = time.time()
 
-            # Process detections
-            for i, det in enumerate(pred):  # detections per image
-                p, s, im0, frame = path, '', im0s, getattr(dataset, 'frame', 0)
+            # Process predictions
+            for i, det in enumerate(pred):  # per image
+                p, im0, frame = path, im0s.copy(), getattr(dataset, 'frame', 0)
 
                 p = Path(p)  # to Path
-                save_path = str(save_dir / name_file_final)  # Caminho do arquivo de destino
+                save_path = str(save_dir / p.name)  # im.jpg
                 if len(det):
                     # Rescale boxes from img_size to im0 size
-                    det[:, :4] = scale_coords(img.shape[2:], det[:, :4], im0.shape).round()
+                    det[:, :4] = scale_boxes(im.shape[2:], det[:, :4], im0.shape).round()
 
                     # Print results
-                    for c in det[:, -1].unique():
-                        n = (det[:, -1] == c).sum()  # detections per class
-                        s += f"{n} {self.names[int(c)]}{'s' * (n > 1)}, "  # add to string
+                    for c in det[:, 5].unique():
+                        n = (det[:, 5] == c).sum()  # detections per class
+                        s += f"{n} {self.model.names[int(c)]}{'s' * (n > 1)}, "  # add to string
 
                     # Write results
                     for *xyxy, conf, cls in reversed(det):
                         # Verify label
-                        if self.names[int(cls)] not in labels_identified or conf < threshold_identified:
+                        if self.model.names[int(cls)] not in labels_identified or conf < threshold_identified:
                             continue
 
                         count_labels_detection += 1
 
-                        label = f'{self.names[int(cls)]} {conf:.2f}'
+                        label = f'{self.model.names[int(cls)]} {conf:.2f}'
                         plot_one_box(xyxy, im0, label=label, color=self.colors[int(cls)], line_thickness=1)
 
 
@@ -117,6 +122,9 @@ class detect():
                         save_path += '.mp4'
                     vid_writer = cv2.VideoWriter(save_path, cv2.VideoWriter_fourcc(*'mp4v'), fps, (w, h))
                 frames.append(im0)
+
+            # Print time (inference-only)
+
 
         if count_labels_detection <= count_min_identified:
             save_path = None
@@ -139,3 +147,4 @@ class detect():
         logger.debug(f'Feito. ({time.time() - t0:.3f}s)')
 
         return save_path, name_file_final
+

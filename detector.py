@@ -19,7 +19,7 @@ count_min_identified = int(os.getenv("COUNT_MIN_IDENTIFIED", 900)) # Representa 
 labels_identified = os.getenv("LABELS_IDENTIFIED", 'person,persons').split(",")
 threshold_identified = float(os.getenv("THRESHOLD_IDENTIFIED", 0.80))
 path_destination = os.getenv("PATH_DESTINATION", "attach_file")
-remove_source = os.getenv("REMOVE_SOURCE_FILE_IN_THE_END", False)
+remove_source = bool(os.getenv("REMOVE_SOURCE_FILE_IN_THE_END", "False"))
 
 logger = config_log(__name__)
 

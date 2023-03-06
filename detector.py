@@ -32,7 +32,7 @@ class detect():
 
     def __init__(self):
 
-        weights = ROOT / 'yolov5s.pt'  # model path or triton URL
+        weights = ROOT / 'yolov5n.pt'  # model path or triton URL
         data = ROOT / 'data/coco128.yaml'  # dataset.yaml path
 
         self.vid_stride = 1  # video frame-rate stride

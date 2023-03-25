@@ -147,7 +147,7 @@ class detect():
         if remove_source:
             os.remove(source)
 
-        logger.debug(f'Quantidade de objetos encontrados: {count_labels_detection:.0f}')
+        logger.info(f'Quantidade de objetos encontrados: {count_labels_detection:.0f}')
         logger.debug(f'Feito. ({time.time() - t0:.3f}s)')
 
         return save_path, name_file_final

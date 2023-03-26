@@ -52,7 +52,9 @@ def worker():
 
         if file_save is not None:
             if item['hour_start_email'] is not None and item['hour_end_email'] is not None and check_time(item['hour_start_email'], item['hour_end_email']):
-                send_email.send_email(file_save, item['location'], name_file_final)
+                pass
+                #Item removido por hora
+                #send_email.send_email(file_save, item['location'], name_file_final)
 
             # Remove o arquivo após o envio
             delete_file(file_save)
